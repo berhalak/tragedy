@@ -10,8 +10,6 @@
     "test:watch": "node --test --watch --experimental-strip-types"
   },
   "devDependencies": {
-    "@types/node": "^22.13.5",
-    "esbuild": "^0.25.0",
-    "typescript": "^5.7.3"
+    "@types/node": "^22.13.5"
   }
 }
