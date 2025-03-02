@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { test } from "node:test";
+import {test} from "node:test";
 
 interface Disposable {
   dispose(): void;
@@ -17,7 +17,7 @@ class DisposableImpl implements Disposable {
   }
 }
 
-type Handler = (message: any) => void|Promise<void>;
+type Handler = (message: any) => void | Promise<void>;
 
 function spawn(handler: Handler) {
   return new Actor(handler);
@@ -41,51 +41,69 @@ class Defer {
   }
 }
 
-const DONE = Symbol('done');
 const STOP = Symbol('stop');
+const HALT = Symbol('halt');
 
 class Mailbox implements AsyncIterable<any> {
-
   private _messages: any[] = [];
-  private _ready : Defer = new Defer();
+  private _ready: Defer = new Defer();
+
+  peek() {
+    return this._messages[0];
+  }
+
+  purge() {
+    this._messages = [];
+    this._ready.resolve();
+  }
 
   send(message: any) {
-    this._messages.push(message);
-    this._ready.resolve();    
+    if (message === HALT) {
+      this._messages.unshift(HALT);
+    } else {
+      this._messages.push(message);
+    }
+    this._ready.resolve();
   }
+
   [Symbol.asyncIterator](): AsyncIterator<any, any, any> {
     return this;
   }
+
   async next() {
     if (this._messages.length === 0) {
       await this._ready.promise;
     }
-    this._ready = new Defer();
+
     const value = this._messages.shift();
-    return { value, done: value === DONE };
+
+    if (value === HALT) {
+      return {value, done: true};
+    }
+
+    this._ready = new Defer();
+    return {value, done: value === STOP};
   }
 }
 
 class Actor {
   private _mailbox = new Mailbox();
-  private _loop: Promise<void>|null = null;
-  private _stop = false;
+  private _loop: Promise<void> | null = null;
   private _handler: Handler;
   constructor(handler: Handler) {
     this._handler = handler;
+    this.start();
   }
+
   send(message: any) {
-
-    if (message === STOP) {
-      this.stop();
-      return;
-    }
-
     this._mailbox.send(message);
-    if (!this._loop) {
-      this.start();
-    }
   }
+
+
+  purge() {
+    this._mailbox.purge();
+  }
+
   start() {
     this._loop = (async () => {
       for await (const message of this._mailbox) {
@@ -94,35 +112,67 @@ class Actor {
         } catch (error) {
           console.error(error);
         }
-        if (this._stop) {
-          break;
-        }
       }
       this._loop = null;
-    })();
+    })().catch(error => {
+      console.error(error);
+    });
   }
-  stop() {
-    this._stop = true;
-    return this.wait();
-  }
+  
   wait() {
     return this._loop ?? Promise.resolve();
   }
+
+  halt() {
+    this.send(STOP);
+    return this.wait();
+  }
+
+  stop() {
+    this.send(STOP);
+    return this.wait();
+  }
+
 }
 
 
 test("just works", async () => {
 
-  let nr= 0;
+  let nr = 0;
 
-  const bob = spawn((message) => {
+  const bob = spawn(() => {
     nr++;
   });
 
   bob.send('hello');
   bob.send('world');
-  bob.send(DONE);
+  bob.send(STOP);
   await bob.wait();
-  assert.equal(nr, 2);
 
+  bob.start();
+
+  bob.send('hello');
+  bob.send('world');
+  bob.send(STOP);
+  await bob.wait();
+
+  assert.equal(nr, 4);
+
+  bob.start();
+  for (let i = 0; i < 1000; i++) {
+    bob.send('hello');
+  }
+  bob.send(HALT);
+  await bob.wait();
+  bob.purge();
+  assert.equal(nr, 4);
+
+
+  bob.start();
+  for (let i = 0; i < 1000; i++) {
+    bob.send('hello');
+  }
+  bob.send(STOP);
+  await bob.wait();
+  assert.equal(nr, 1004);
 });
