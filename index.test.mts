@@ -99,14 +99,24 @@ class Actor {
     this._mailbox.send(message);
   }
 
-
   purge() {
     this._mailbox.purge();
   }
 
   start() {
+    if (this._loop) {
+      return;
+    }
     this._loop = (async () => {
       for await (const message of this._mailbox) {
+
+        if (typeof message === 'object') {
+          if (message.type === 'sync' && message.promise instanceof Defer) {
+            message.promise.resolve();
+            continue;
+          }
+        }
+
         try {
           await this._handler(message);
         } catch (error) {
@@ -133,11 +143,14 @@ class Actor {
     return this.wait();
   }
 
+  async sync() {
+    const defer = new Defer();
+    this.send({type: 'sync', promise: defer});
+    await defer.promise;
+  }
+
 }
-
-
-test("just works", async () => {
-
+test("can receive and stop", async () => {
   let nr = 0;
 
   const bob = spawn(() => {
@@ -149,6 +162,16 @@ test("just works", async () => {
   bob.send(STOP);
   await bob.wait();
 
+  assert.equal(nr, 2);
+});
+
+test("can restart and receive messages", async () => {
+  let nr = 0;
+
+  const bob = spawn(() => {
+    nr++;
+  });
+
   bob.start();
 
   bob.send('hello');
@@ -156,23 +179,40 @@ test("just works", async () => {
   bob.send(STOP);
   await bob.wait();
 
-  assert.equal(nr, 4);
+  assert.equal(nr, 2);
+});
 
-  bob.start();
+test("can handle multiple messages and halt", async () => {
+  let nr = 0;
+
+  const bob = spawn(() => {
+    nr++;
+  });
+
   for (let i = 0; i < 1000; i++) {
     bob.send('hello');
   }
   bob.send(HALT);
   await bob.wait();
   bob.purge();
-  assert.equal(nr, 4);
+  assert.equal(nr, 0);
+});
 
+test("can sync and continue processing", async () => {
+  let nr = 0;
 
-  bob.start();
-  for (let i = 0; i < 1000; i++) {
+  const bob = spawn(() => {
+    nr++;
+  });
+
+  for (let i = 1; i <= 1000; i++) {
     bob.send('hello');
+    if (i === 500) {
+      await bob.sync();
+      assert.equal(nr, 500);
+    }
   }
   bob.send(STOP);
   await bob.wait();
-  assert.equal(nr, 1004);
+  assert.equal(nr, 1000);
 });
