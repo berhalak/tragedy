@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import {test} from "node:test";
-import {STOP, HALT, spawn} from './Actor.mts';
+import {STOP, PAUSE, spawn} from './Actor.mts';
 
 test("can receive and stop", async () => {
   let nr = 0;
@@ -9,9 +9,9 @@ test("can receive and stop", async () => {
     nr++;
   });
 
-  bob.send('hello');
-  bob.send('world');
-  bob.send(STOP);
+  bob.next('hello');
+  bob.next('world');
+  bob.next(STOP);
   await bob.wait();
 
   assert.equal(nr, 2);
@@ -26,15 +26,15 @@ test("can restart and receive messages", async () => {
 
   bob.start();
 
-  bob.send('hello');
-  bob.send('world');
-  bob.send(STOP);
+  bob.next('hello');
+  bob.next('world');
+  bob.next(STOP);
   await bob.wait();
 
   assert.equal(nr, 2);
 });
 
-test("can handle multiple messages and halt", async () => {
+test("can handle multiple messages and pause", async () => {
   let nr = 0;
 
   const bob = spawn(() => {
@@ -42,9 +42,9 @@ test("can handle multiple messages and halt", async () => {
   });
 
   for (let i = 0; i < 1000; i++) {
-    bob.send('hello');
+    bob.next('hello');
   }
-  bob.send(HALT);
+  bob.next(PAUSE);
   await bob.wait();
   bob.purge();
   assert.equal(nr, 0);
@@ -58,13 +58,14 @@ test("can sync and continue processing", async () => {
   });
 
   for (let i = 1; i <= 1000; i++) {
-    bob.send('hello');
+    bob.next('hello');
     if (i === 500) {
       await bob.sync();
       assert.equal(nr, 500);
     }
   }
-  bob.send(STOP);
+  bob.next(STOP);
   await bob.wait();
   assert.equal(nr, 1000);
 });
+

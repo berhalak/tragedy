@@ -1,18 +1,19 @@
-export interface Disposable {
+export interface IDisposable {
   dispose(): void;
-  autoDispose<T extends Disposable>(child: T): T;
 }
 
-export class DisposableImpl implements Disposable {
-  private _children: Disposable[] = [];
+export class Disposable implements IDisposable {
+  private _children: IDisposable[] = [];
   dispose(): void {
     this._children.forEach(d => d.dispose());
   }
-  autoDispose<T extends Disposable>(child: T) {
+  autoDispose<T extends IDisposable>(child: T): T {
     this._children.push(child);
     return child;
   }
 }
+
+export type MaybePromise<T> = T | Promise<T>;
 
 export class Defer {
   private _resolve!: () => void;
@@ -31,3 +32,4 @@ export class Defer {
     return this._promise;
   }
 }
+
