@@ -1,5 +1,5 @@
 import {inject} from 'overnew';
-import {Defer, Disposable} from './utils.mts';
+import {Defer, Disposable} from './utils.ts';
 import {Observable, type Observer, Subject, type Subscribable, type Unsubscribable} from 'rxjs';
 
 
@@ -145,37 +145,15 @@ export class Consumer extends Disposable implements Subscribable<any> {
     return this._emitter.subscribe(observer);
   }
 
-  sink(stop = false) {
-    return (source: Observable<any>) => {
-      const sub = source.subscribe({
-        next: (message) => {
-          this.next(message);
-        },
-        complete: () => {
-          if (stop) {
-            this.next(STOP);
-          }
-        }
-      });
-
-      this.autoDispose({
-        dispose: () => {
-          sub.unsubscribe();
-        }
-      });
-
-      return this._emitter;
-    };
-  }
-
   private _toContext(): Context {
+    const self = this;
     return {
       next: m => this._emitter.next(m),
       get handler() {
-        return this._handler;
+        return self._handler;
       },
       set handler(h) {
-        this._handler = h;
+        self._handler = h;
       }
     };
   }
